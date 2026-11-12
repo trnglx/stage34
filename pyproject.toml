@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stage34"
+version = "0.1.0rc1"
+description = "Fenced, verifiable orchestration for native coding agents"
+requires-python = ">=3.9"
+license = {text = "Apache-2.0"}
+readme = "README.md"
+dependencies = []
+
+[project.optional-dependencies]
+connections = ["keyring>=25,<26"]
+
+[project.scripts]
+stage34 = "stage34.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "currency": "USD",
+  "tier": "default",
+  "endpoint": "https://api.openai.com/v1",
+  "prices": [
+    {
+      "model": "gpt-5.4",
+      "snapshots": ["gpt-5.4-2026-03-05"],
+      "input_usd_per_million": "2.50",
+      "cached_input_usd_per_million": "0.25",
+      "output_usd_per_million": "15.00",
+      "source": "https://developers.openai.com/api/docs/models/gpt-5.4",
+      "checked": "2026-11-11",
+      "long_context_threshold": 272000,
+      "long_input_multiplier": "2",
+      "long_output_multiplier": "1.5"
+    }
+  ]
+}

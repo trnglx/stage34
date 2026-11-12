@@ -1,0 +1,9 @@
+.stage34/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+node_modules/
+.venv/
+.env

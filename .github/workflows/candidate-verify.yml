@@ -1,0 +1,108 @@
+name: Stage34 candidate verification
+run-name: verify ${{ inputs.verify_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      verify_id:
+        required: true
+        type: string
+      sha:
+        required: true
+        type: string
+      checks:
+        required: true
+        type: string
+      policy_json:
+        required: true
+        type: string
+      verifier_sha:
+        required: true
+        type: string
+      ac_ref:
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Admit immutable execution context
+        env:
+          VERIFY_ID: ${{ inputs.verify_id }}
+          SHA: ${{ inputs.sha }}
+          CHECKS: ${{ inputs.checks }}
+          EXPECTED: ${{ inputs.verifier_sha }}
+          ACTUAL: ${{ github.workflow_sha }}
+          AC_REF: ${{ inputs.ac_ref }}
+        run: |
+          set -euo pipefail
+          [[ "$VERIFY_ID" =~ ^V-[a-f0-9]{10}$ ]]
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$CHECKS" =~ ^[a-z0-9-]+(,[a-z0-9-]+)*$ ]]
+          [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ && "$ACTUAL" == "$EXPECTED" ]]
+          [[ -z "$AC_REF" || "$AC_REF" =~ ^[a-f0-9]{40}$ ]]
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.verifier_sha }}
+          path: trusted
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
+          path: cand
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Isolate Python and runner state
+        run: |
+          set -euo pipefail
+          iso="$RUNNER_TEMP/candidate-verify"
+          mkdir -p "$iso/home" "$iso/out"
+          python3 -m venv "$iso/venv"
+          "$iso/venv/bin/python" -m pip install --quiet pytest==9.2.0 pytest-xdist==3.8.0 uv==0.9.5
+          export UV_PYTHON_INSTALL_DIR="$iso/uv-python" UV_CACHE_DIR="$iso/uv-cache"
+          "$iso/venv/bin/uv" python install 3.9
+          cli_py="$("$iso/venv/bin/uv" python find 3.9)"
+          {
+            echo "VERIFY_CLI_PY=$cli_py"
+            echo "VERIFY_PY=$iso/venv/bin/python"
+            echo "HOME=$iso/home"
+            echo "XDG_CACHE_HOME=$iso/home/.cache"
+          } >> "$GITHUB_ENV"
+      - name: Run verifier
+        env:
+          POLICY_JSON: ${{ inputs.policy_json }}
+          CHECKS: ${{ inputs.checks }}
+          SHA: ${{ inputs.sha }}
+          VERIFY_ID: ${{ inputs.verify_id }}
+          VERIFIER_SHA: ${{ inputs.verifier_sha }}
+          AC_REF: ${{ inputs.ac_ref }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/candidate-verify/out"
+          printf '%s' "$POLICY_JSON" > "$RUNNER_TEMP/candidate-verify/policy.json"
+          "$VERIFY_PY" "$GITHUB_WORKSPACE/trusted/src/stage34/core/verify_pc_run.py" \
+            --policy "$RUNNER_TEMP/candidate-verify/policy.json" --checks "$CHECKS" --sha "$SHA" \
+            --tree "$GITHUB_WORKSPACE/cand" --out "$out" \
+            --tools "$GITHUB_WORKSPACE/trusted/src/stage34/core" \
+            --verify-id "$VERIFY_ID" --verifier-sha "$VERIFIER_SHA" --run-id "$GITHUB_RUN_ID" \
+            --ac-ref "$AC_REF" --python "$VERIFY_PY" --cli-python "$VERIFY_CLI_PY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: receipts-${{ inputs.verify_id }}
+          path: ${{ runner.temp }}/candidate-verify/out/receipts.json
+          retention-days: 7
+          if-no-files-found: error
